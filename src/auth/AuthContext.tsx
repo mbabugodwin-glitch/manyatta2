@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, SUPABASE_CONFIGURED } from '../lib/supabaseClient';
 
 interface AuthContextType {
   user: User | null;
@@ -11,6 +11,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   error: string | null;
   clearError: () => void;
+  isConfigured: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,12 +23,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // If Supabase is not configured, skip auth setup
+    if (!SUPABASE_CONFIGURED) {
       setLoading(false);
-    });
+      setError('Supabase configuration missing. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
+      return;
+    }
+
+    // Check active sessions and sets the user
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error getting session:', err);
+        setLoading(false);
+      });
 
     // Listen for changes on auth state (signed in, signed out, etc.)
     const {
@@ -42,6 +55,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signUp = async (email: string, password: string) => {
+    if (!SUPABASE_CONFIGURED) {
+      throw new Error('Authentication not available. Supabase is not configured.');
+    }
     try {
       setError(null);
       const { error } = await supabase.auth.signUp({
@@ -57,6 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!SUPABASE_CONFIGURED) {
+      throw new Error('Authentication not available. Supabase is not configured.');
+    }
     try {
       setError(null);
       const { error } = await supabase.auth.signInWithPassword({
@@ -72,6 +91,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    if (!SUPABASE_CONFIGURED) {
+      throw new Error('Authentication not available. Supabase is not configured.');
+    }
     try {
       setError(null);
       const { error } = await supabase.auth.signOut();
@@ -96,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signOut,
         error,
         clearError,
+        isConfigured: SUPABASE_CONFIGURED,
       }}
     >
       {children}
