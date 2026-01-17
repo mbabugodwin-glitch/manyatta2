@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from './src/auth/AuthContext';
 // Lazy load page components for code splitting
 const Home = React.lazy(() => import('./pages/Home'));
 const Auth = React.lazy(() => import('./pages/Auth'));
+const Profile = React.lazy(() => import('./pages/Profile'));
 const MountainVillas = React.lazy(() => import('./pages/MountainVillas'));
 const Safaris = React.lazy(() => import('./pages/Safaris'));
 const UrbanApartments = React.lazy(() => import('./pages/UrbanApartments'));
@@ -60,6 +61,14 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/auth" element={<Auth />} />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/mountain-villas"
             element={

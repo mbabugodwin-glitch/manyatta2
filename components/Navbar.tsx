@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Phone, Calendar } from 'lucide-react';
+import { Menu, X, Phone, Calendar, User, LogOut } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { NAVIGATION_LINKS, APP_NAME, CONTACT_PHONE } from '../constants';
 import { TYPOGRAPHY, SPACING, COLORS, Z_INDEX, TRANSITIONS, MEDIA_QUERIES } from '../tokens';
 import OptimizedImage from './OptimizedImage';
+import { useAuth } from '../src/auth/AuthContext';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, signOut, isConfigured } = useAuth();
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
   // Handle scroll effect
@@ -39,14 +44,17 @@ const Navbar: React.FC = () => {
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
     };
 
-    if (isOpen) {
+    if (isOpen || showUserMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, showUserMenu]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -191,6 +199,65 @@ const Navbar: React.FC = () => {
               </span>
               <span className="absolute inset-0 rounded-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
             </button>
+
+            {/* User Profile Menu */}
+            {isConfigured && user && (
+              <div 
+                ref={userMenuRef}
+                className="relative"
+                onMouseEnter={() => setShowUserMenu(true)}
+                onMouseLeave={() => setShowUserMenu(false)}
+              >
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 ${
+                    scrolled
+                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                  aria-label="User menu"
+                  aria-expanded={showUserMenu}
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white text-sm font-bold">
+                    {user.email?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                </button>
+
+                {/* User Dropdown Menu */}
+                {showUserMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-2 w-56 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100/50 py-3 z-50"
+                  >
+                    <div className="px-4 py-3 border-b border-gray-200/50">
+                      <p className="text-sm font-semibold text-gray-900">Account</p>
+                      <p className="text-xs text-gray-600 truncate">{user.email}</p>
+                    </div>
+                    <Link
+                      to="/profile"
+                      className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:text-primary hover:bg-primary/5 transition-all duration-200"
+                      onClick={() => setShowUserMenu(false)}
+                    >
+                      <User size={16} />
+                      <span className="text-sm font-medium">My Profile</span>
+                    </Link>
+                    <button
+                      onClick={() => {
+                        signOut();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200 text-left"
+                    >
+                      <LogOut size={16} />
+                      <span className="text-sm font-medium">Sign Out</span>
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Logo - Right Side */}
@@ -282,6 +349,22 @@ const Navbar: React.FC = () => {
 
           {/* Mobile Call to Action */}
           <div className="space-y-4 pt-4 border-t border-gray-200/50">
+            {/* User Profile Section */}
+            {isConfigured && user && (
+              <div className="px-5 py-4 bg-primary/10 rounded-xl">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">Account</p>
+                <p className="text-sm font-medium text-gray-900 truncate mb-3">{user.email}</p>
+                <Link
+                  to="/profile"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-medium transition-colors hover:bg-primary/90 text-sm w-full"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <User size={16} />
+                  My Profile
+                </Link>
+              </div>
+            )}
+
             {/* Phone Number */}
             {CONTACT_PHONE && (
               <a
@@ -333,8 +416,5 @@ const Navbar: React.FC = () => {
     </nav>
   );
 };
-
-// Import motion from framer-motion if not already
-import { motion } from 'framer-motion';
 
 export default Navbar;
