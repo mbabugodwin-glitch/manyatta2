@@ -367,14 +367,41 @@ Create `src/services/supabase.ts`:
 
 ```typescript
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types'; // Generate via: npx supabase gen types typescript
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = https://nombxgiacoicjzhpktwx.supabase.co;
+const supabaseKey = sb_publishable_Jyqp5x3WeVgLVQ71L2tJ5w_ncLtNq1v;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Validate required environment variables
+if (!supabaseUrl) {
+  throw new Error(
+    'Missing VITE_SUPABASE_URL environment variable. ' +
+    'Please check your .env.local file.'
+  );
+}
 
-// Export types for easier usage
-export type Database = any; // Generate via Supabase CLI for full types
+if (!supabaseKey) {
+  throw new Error(
+    'Missing VITE_SUPABASE_ANON_KEY environment variable. ' +
+    'Please check your .env.local file.'
+  );
+}
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
+
+// Export types for type-safe database operations
+export type { Database } from './database.types';
+```
+
+**To generate proper types**, run in your project:
+```bash
+npx supabase gen types typescript --project-id your-project-id > src/services/database.types.ts
 ```
 
 ### 2. Authentication Service
