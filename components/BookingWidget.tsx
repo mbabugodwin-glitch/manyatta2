@@ -8,8 +8,42 @@ import { motion } from 'framer-motion';
 
 const BookingWidget: React.FC = () => {
   const [activeTab, setActiveTab] = useState<PropertyType>('mountain');
+  const [checkInDate, setCheckInDate] = useState<string>('');
+  const [checkOutDate, setCheckOutDate] = useState<string>('');
+  const [numberOfGuests, setNumberOfGuests] = useState<number>(1);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handleCheckAvailability = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate dates
+    if (!checkInDate || !checkOutDate) {
+      alert('Please select both check-in and check-out dates');
+      return;
+    }
+
+    if (new Date(checkInDate) >= new Date(checkOutDate)) {
+      alert('Check-out date must be after check-in date');
+      return;
+    }
+
+    // Navigate to property page with booking params
+    const propertyRoutes = {
+      mountain: '/mountain-villas',
+      safari: '/safaris',
+      urban: '/urban-apartments',
+    };
+
+    const route = propertyRoutes[activeTab] || '/';
+    navigate(route, {
+      state: {
+        checkInDate,
+        checkOutDate,
+        numberOfGuests,
+      }
+    });
+  };
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden -mt-16 relative z-30 hidden lg:block border border-gray-100 hover:shadow-3xl transition-shadow duration-300" style={{ backgroundColor: COLORS.white, color: COLORS.dark }} role="region" aria-label="Availability checker">
@@ -61,8 +95,8 @@ const BookingWidget: React.FC = () => {
 
       {/* Form */}
       <form 
-        className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end" 
-        onSubmit={(e) => { e.preventDefault(); navigate('/others'); }}
+        className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end" 
+        onSubmit={handleCheckAvailability}
         aria-label="Property booking form"
       >
         {/* Location/Type Selector */}
@@ -102,8 +136,11 @@ const BookingWidget: React.FC = () => {
             <input
               id="check-in-date"
               type="date"
+              value={checkInDate}
+              onChange={(e) => setCheckInDate(e.target.value)}
               className="outline-none w-full text-dark font-serif bg-transparent uppercase text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary rounded px-1"
               aria-label="Check in date"
+              required
             />
           </div>
         </div>
@@ -121,9 +158,36 @@ const BookingWidget: React.FC = () => {
             <input
               id="check-out-date"
               type="date"
+              value={checkOutDate}
+              onChange={(e) => setCheckOutDate(e.target.value)}
               className="outline-none w-full text-dark font-serif bg-transparent uppercase text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary rounded px-1"
               aria-label="Check out date"
+              required
             />
+          </div>
+        </div>
+
+        {/* Guests */}
+        <div className="border-r border-gray-200 pr-4">
+          <label 
+            className="text-xs text-gray-400 font-medium uppercase mb-1 block" 
+            htmlFor="guests"
+          >
+            Guests
+          </label>
+          <div className="flex items-center gap-2 text-dark font-serif text-lg">
+            <Users size={18} className="text-primary" aria-hidden="true" />
+            <select
+              id="guests"
+              value={numberOfGuests}
+              onChange={(e) => setNumberOfGuests(parseInt(e.target.value))}
+              className="outline-none w-full text-dark font-serif bg-transparent text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary rounded px-1"
+              aria-label="Number of guests"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>{num}</option>
+              ))}
+            </select>
           </div>
         </div>
 
