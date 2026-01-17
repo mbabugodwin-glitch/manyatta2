@@ -31,7 +31,8 @@ const ScrollToTop = () => {
 // Layout component that conditionally shows navbar and footer
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { pathname } = useLocation();
-  const isAuthPage = pathname === '/auth' || pathname === '/#/auth';
+  const { user } = useAuth();
+  const isAuthPage = pathname === '/auth' || pathname === '/#/auth' || !user;
   
   return (
     <>
@@ -49,12 +50,26 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const AppContent: React.FC = () => {
-  const { loading } = useAuth();
+  const { loading, user } = useAuth();
 
   if (loading) {
     return <PageLoader />;
   }
 
+  // Redirect unauthenticated users to Auth page
+  if (!user) {
+    return (
+      <Layout>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="*" element={<Auth />} />
+          </Routes>
+        </Suspense>
+      </Layout>
+    );
+  }
+
+  // Authenticated users see the full app
   return (
     <Layout>
       <Suspense fallback={<PageLoader />}>
