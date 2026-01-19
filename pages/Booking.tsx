@@ -6,6 +6,8 @@ import { Calendar, Users, MapPin, CreditCard, AlertCircle, CheckCircle, Loader, 
 import { useAuth } from '../src/auth/AuthContext';
 import { COLORS, TYPOGRAPHY, BORDER_RADIUS, TRANSITIONS, SHADOWS, SPACING } from '../tokens';
 import { PropertyType } from '../types';
+import { createBooking, checkPropertyAvailability } from '../services/bookingService';
+import { getPropertyById } from '../services/propertyService';
 
 interface BookingData {
   propertyId: string;
@@ -30,6 +32,7 @@ const Booking: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [currentStep, setCurrentStep] = useState<'details' | 'confirmation'>('details');
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
   // Initialize booking data from route state or search params
   useEffect(() => {
@@ -56,6 +59,33 @@ const Booking: React.FC = () => {
     }
   }, [location.state, searchParams, navigate]);
 
+  // Verify availability on component mount
+  useEffect(() => {
+    const verifyAvailability = async () => {
+      if (!bookingData) return;
+
+      try {
+        setIsCheckingAvailability(true);
+        const result = await checkPropertyAvailability({
+          propertyId: bookingData.propertyId,
+          checkInDate: bookingData.checkInDate,
+          checkOutDate: bookingData.checkOutDate,
+        });
+
+        if (!result.available) {
+          setError(result.reason || 'Property is no longer available for selected dates');
+        }
+      } catch (err) {
+        console.error('Availability check failed:', err);
+        setError('Unable to verify property availability');
+      } finally {
+        setIsCheckingAvailability(false);
+      }
+    };
+
+    verifyAvailability();
+  }, [bookingData]);
+
   // Redirect to auth if not logged in
   useEffect(() => {
     if (!loading && !user) {
@@ -70,29 +100,16 @@ const Booking: React.FC = () => {
       setError(null);
       setIsSubmitting(true);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/create_booking`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          property_id: bookingData.propertyId,
-          property_type: bookingData.propertyType,
-          check_in_date: bookingData.checkInDate,
-          check_out_date: bookingData.checkOutDate,
-          number_of_guests: bookingData.numberOfGuests,
-          total_price: bookingData.totalPrice,
-          currency: bookingData.currency,
-          special_requests: bookingData.specialRequests || null,
-        }),
+      // Use the new booking service which handles all three table inserts
+      const booking = await createBooking(user.id, {
+        propertyId: bookingData.propertyId,
+        checkInDate: bookingData.checkInDate,
+        checkOutDate: bookingData.checkOutDate,
+        numberOfGuests: bookingData.numberOfGuests,
+        totalPrice: bookingData.totalPrice,
+        currency: bookingData.currency,
+        specialRequests: bookingData.specialRequests,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create booking');
-      }
 
       setSuccess(true);
       setCurrentStep('confirmation');
@@ -104,12 +121,13 @@ const Booking: React.FC = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create booking';
       setError(message);
+      console.error('Booking creation error:', err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loading || !bookingData) {
+  if (loading || !bookingData || isCheckingAvailability) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <motion.div
