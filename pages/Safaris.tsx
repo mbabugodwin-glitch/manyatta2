@@ -125,16 +125,9 @@ const Safaris: React.FC = () => {
 
       navigate('/booking', {
         state: {
-          property: {
-            id: location.id,
-            name: location.name,
-            type: 'safari',
-            region: location.region,
-            basePrice: location.lodging?.[0]?.pricePerNight || '500',
-            currency: 'KES',
-            image: location.imageUrl,
-            description: location.description,
-          },
+          propertyId: location.id,
+          propertyType: 'safari',
+          propertyName: location.name,
           checkInDate,
           checkOutDate,
           numberOfGuests: guests,

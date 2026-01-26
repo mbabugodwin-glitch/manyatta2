@@ -161,7 +161,13 @@ const UrbanApartments: React.FC = () => {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       className="flex-1 bg-primary text-white py-3 rounded-lg text-sm font-bold uppercase tracking-wide hover:bg-[#c4492e] transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      onClick={() => navigate('/others')}
+                      onClick={() => navigate('/booking', {
+                        state: {
+                          propertyId: apt.id,
+                          propertyType: 'urban',
+                          propertyName: apt.name,
+                        }
+                      })}
                       type="button"
                     >
                       Book Stay <ArrowRight size={16} />

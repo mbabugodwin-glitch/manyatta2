@@ -13,11 +13,11 @@ interface BookingData {
   propertyId: string;
   propertyType: PropertyType;
   propertyName: string;
-  checkInDate: string;
-  checkOutDate: string;
-  numberOfGuests: number;
-  totalPrice: number;
-  currency: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  numberOfGuests?: number;
+  totalPrice?: number;
+  currency?: string;
   specialRequests?: string;
 }
 
@@ -33,13 +33,25 @@ const Booking: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [currentStep, setCurrentStep] = useState<'details' | 'confirmation'>('details');
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [pricePerNight, setPricePerNight] = useState<number>(500);
+  const [isLoadingPricing, setIsLoadingPricing] = useState(false);
 
   // Initialize booking data from route state or search params
   useEffect(() => {
-    const state = location.state as BookingData | null;
+    const state = location.state as Partial<BookingData> | null;
     
     if (state) {
-      setBookingData(state);
+      setBookingData({
+        propertyId: state.propertyId || '',
+        propertyType: state.propertyType || 'mountain',
+        propertyName: state.propertyName || '',
+        checkInDate: state.checkInDate || '',
+        checkOutDate: state.checkOutDate || '',
+        numberOfGuests: state.numberOfGuests || 1,
+        totalPrice: state.totalPrice || 0,
+        currency: state.currency || 'KES',
+        specialRequests: state.specialRequests || '',
+      });
     } else if (searchParams.has('propertyId')) {
       // Reconstruct from search params if needed
       const data: BookingData = {
@@ -59,10 +71,44 @@ const Booking: React.FC = () => {
     }
   }, [location.state, searchParams, navigate]);
 
+  // Fetch property pricing if not provided
+  useEffect(() => {
+    const fetchPropertyPricing = async () => {
+      if (!bookingData?.propertyId) return;
+
+      try {
+        setIsLoadingPricing(true);
+        const propertyData = await getPropertyById(bookingData.propertyId);
+        
+        if (propertyData) {
+          setPricePerNight(propertyData.pricePerNight || 500);
+          
+          // Calculate total price if not provided
+          if (!bookingData.totalPrice && bookingData.checkInDate && bookingData.checkOutDate) {
+            const nights = Math.ceil(
+              (new Date(bookingData.checkOutDate).getTime() - new Date(bookingData.checkInDate).getTime()) /
+              (1000 * 60 * 60 * 24)
+            );
+            const total = nights * (propertyData.pricePerNight || 500);
+            setBookingData(prev => prev ? { ...prev, totalPrice: total, currency: 'KES' } : null);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching property pricing:', err);
+        // Use default pricing
+      } finally {
+        setIsLoadingPricing(false);
+      }
+    };
+
+    fetchPropertyPricing();
+  }, [bookingData?.propertyId]);
+
+
   // Verify availability on component mount
   useEffect(() => {
     const verifyAvailability = async () => {
-      if (!bookingData) return;
+      if (!bookingData?.checkInDate || !bookingData?.checkOutDate) return;
 
       try {
         setIsCheckingAvailability(true);
@@ -84,7 +130,7 @@ const Booking: React.FC = () => {
     };
 
     verifyAvailability();
-  }, [bookingData]);
+  }, [bookingData?.checkInDate, bookingData?.checkOutDate, bookingData?.propertyId]);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -127,7 +173,7 @@ const Booking: React.FC = () => {
     }
   };
 
-  if (loading || !bookingData || isCheckingAvailability) {
+  if (loading || !bookingData || isCheckingAvailability || isLoadingPricing) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <motion.div
@@ -139,10 +185,15 @@ const Booking: React.FC = () => {
     );
   }
 
-  const nights = Math.ceil(
-    (new Date(bookingData.checkOutDate).getTime() - new Date(bookingData.checkInDate).getTime()) / 
-    (1000 * 60 * 60 * 24)
-  );
+  const nights = bookingData.checkInDate && bookingData.checkOutDate
+    ? Math.ceil(
+        (new Date(bookingData.checkOutDate).getTime() - new Date(bookingData.checkInDate).getTime()) / 
+        (1000 * 60 * 60 * 24)
+      )
+    : 0;
+
+  const hasCompleteDates = bookingData.checkInDate && bookingData.checkOutDate;
+  const totalPrice = bookingData.totalPrice || (nights > 0 ? nights * pricePerNight : 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 pt-32 pb-16">
@@ -194,6 +245,44 @@ const Booking: React.FC = () => {
 
         {currentStep === 'details' ? (
           <>
+            {/* Date Input Section - if dates are missing */}
+            {!hasCompleteDates && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+                className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6"
+              >
+                <h3 className="text-lg font-semibold text-blue-900 mb-4">Select Your Stay Dates</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Check-In Date</label>
+                    <input
+                      type="date"
+                      value={bookingData.checkInDate || ''}
+                      onChange={(e) => {
+                        setBookingData(prev => prev ? { ...prev, checkInDate: e.target.value } : null);
+                      }}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Check-Out Date</label>
+                    <input
+                      type="date"
+                      value={bookingData.checkOutDate || ''}
+                      onChange={(e) => {
+                        setBookingData(prev => prev ? { ...prev, checkOutDate: e.target.value } : null);
+                      }}
+                      min={bookingData.checkInDate || new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* Booking Details Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -213,36 +302,40 @@ const Booking: React.FC = () => {
               {/* Details Grid */}
               <div className="grid grid-cols-2 gap-6 mb-8">
                 {/* Check-in */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar size={16} className="text-primary" />
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Check-In</label>
+                {bookingData.checkInDate && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar size={16} className="text-primary" />
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Check-In</label>
+                    </div>
+                    <p className="text-lg font-serif text-gray-900">
+                      {new Date(bookingData.checkInDate).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
                   </div>
-                  <p className="text-lg font-serif text-gray-900">
-                    {new Date(bookingData.checkInDate).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
+                )}
 
                 {/* Check-out */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar size={16} className="text-primary" />
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Check-Out</label>
+                {bookingData.checkOutDate && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar size={16} className="text-primary" />
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Check-Out</label>
+                    </div>
+                    <p className="text-lg font-serif text-gray-900">
+                      {new Date(bookingData.checkOutDate).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
                   </div>
-                  <p className="text-lg font-serif text-gray-900">
-                    {new Date(bookingData.checkOutDate).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
+                )}
 
                 {/* Guests */}
                 <div>
@@ -254,13 +347,16 @@ const Booking: React.FC = () => {
                 </div>
 
                 {/* Duration */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar size={16} className="text-primary" />
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Duration</label>
+                {/* Duration */}
+                {hasCompleteDates && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar size={16} className="text-primary" />
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Duration</label>
+                    </div>
+                    <p className="text-lg font-serif text-gray-900">{nights} night{nights !== 1 ? 's' : ''}</p>
                   </div>
-                  <p className="text-lg font-serif text-gray-900">{nights} night{nights !== 1 ? 's' : ''}</p>
-                </div>
+                )}
               </div>
 
               {/* Special Requests */}
@@ -272,26 +368,28 @@ const Booking: React.FC = () => {
               )}
 
               {/* Price Breakdown */}
-              <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">
-                      {bookingData.currency} {(bookingData.totalPrice / nights).toFixed(2)} × {nights} night{nights !== 1 ? 's' : ''}
-                    </span>
-                    <span className="text-gray-900 font-semibold">
-                      {bookingData.currency} {bookingData.totalPrice.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="border-t border-primary/20 pt-3">
+              {hasCompleteDates && (
+                <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-6">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-lg font-semibold text-gray-900">Total</span>
-                      <span className="text-2xl font-bold text-primary">
-                        {bookingData.currency} {bookingData.totalPrice.toFixed(2)}
+                      <span className="text-gray-600">
+                        {bookingData.currency || 'KES'} {(totalPrice / nights).toFixed(2)} × {nights} night{nights !== 1 ? 's' : ''}
                       </span>
+                      <span className="text-gray-900 font-semibold">
+                        {bookingData.currency || 'KES'} {totalPrice.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="border-t border-primary/20 pt-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-lg font-semibold text-gray-900">Total</span>
+                        <span className="text-2xl font-bold text-primary">
+                          {bookingData.currency || 'KES'} {totalPrice.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </motion.div>
 
             {/* Action Buttons */}
@@ -309,7 +407,7 @@ const Booking: React.FC = () => {
                 whileHover={{ y: -2 }}
                 whileTap={{ y: 0 }}
                 className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg transition-colors hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !hasCompleteDates}
               >
                 {isSubmitting ? (
                   <>

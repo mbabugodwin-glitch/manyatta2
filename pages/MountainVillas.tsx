@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { MapPin, Check, Camera } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ImageSlideshowModal from '../components/ImageSlideshowModal';
 import GlareHover from '../components/GlareHover';
@@ -10,12 +10,6 @@ import {
   BURGURET_IMAGES,
   NARUMORU_VILLA_DETAILS
 } from '../constants';
-
-interface BookingState {
-  checkInDate?: string;
-  checkOutDate?: string;
-  numberOfGuests?: number;
-}
 
 const VILLAS = [
   {
@@ -34,19 +28,9 @@ const VILLAS = [
 
 const MountainVillas: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [selectedTitle, setSelectedTitle] = useState("");
-  const [bookingParams, setBookingParams] = useState<BookingState | null>(null);
-
-  // Get booking parameters from router state
-  useEffect(() => {
-    const state = location.state as BookingState | null;
-    if (state) {
-      setBookingParams(state);
-    }
-  }, [location.state]);
 
   const openGallery = (images: string[], title: string) => {
     setSelectedImages(images);
@@ -55,32 +39,14 @@ const MountainVillas: React.FC = () => {
   };
 
   const handleBookingClick = (villa: typeof VILLAS[0]) => {
-    if (bookingParams?.checkInDate && bookingParams?.checkOutDate) {
-      // Calculate price based on nights (example: 500 KES per night)
-      const nights = Math.ceil(
-        (new Date(bookingParams.checkOutDate).getTime() - new Date(bookingParams.checkInDate).getTime()) /
-        (1000 * 60 * 60 * 24)
-      );
-      const pricePerNight = 500;
-      const totalPrice = nights * pricePerNight;
-
-      navigate('/booking', {
-        state: {
-          propertyId: villa.id,
-          propertyType: 'mountain',
-          propertyName: villa.details.title,
-          checkInDate: bookingParams.checkInDate,
-          checkOutDate: bookingParams.checkOutDate,
-          numberOfGuests: bookingParams.numberOfGuests || 1,
-          totalPrice,
-          currency: 'KES',
-        }
-      });
-    } else {
-      // If no booking params, just show alert
-      alert('Please select dates from the availability checker on the home page');
-      navigate('/');
-    }
+    // Navigate to booking page - let the Booking page handle property lookup
+    navigate('/booking', {
+      state: {
+        propertyId: villa.id,
+        propertyType: 'mountain',
+        propertyName: villa.details.title,
+      }
+    });
   };
 
   return (
