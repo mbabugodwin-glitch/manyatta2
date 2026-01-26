@@ -59,6 +59,47 @@ export interface Apartment {
   features: string[];
 }
 
+export interface SafariLocationLodging {
+  name: string;
+  type: 'luxury' | 'mid-range' | 'budget' | 'tented';
+  pricePerNight?: string;
+}
+
+export interface SafariLocation {
+  id: string;
+  name: string;
+  region: string;
+  description: string;
+  imageUrl: string;
+  mapCoordinates: {
+    x: number;
+    y: number;
+  };
+  wildlife: string[];
+  lodging: SafariLocationLodging[];
+  bestTimeToVisit?: string;
+  accessibleFrom?: string;
+  distanceFromNairobi?: string;
+  visitCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SafariMapInteraction {
+  id: string;
+  user_id: string;
+  location_id: string;
+  interaction_type: 'view' | 'click' | 'hover' | 'booking_initiated' | 'info_opened';
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SafariMapInteractionPayload {
+  locationId: string;
+  interactionType: 'view' | 'click' | 'hover' | 'booking_initiated' | 'info_opened';
+  metadata?: Record<string, unknown>;
+}
+
 // Database Schema Types (Matches Implementation Plan)
 export interface Property {
   id: string;

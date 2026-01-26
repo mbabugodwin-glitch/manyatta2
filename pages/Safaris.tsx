@@ -1,17 +1,159 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Map, Clock, ArrowRight, Compass, ChevronDown, ChevronUp, MapPin, BedDouble } from 'lucide-react';
+import { Map, Clock, ArrowRight, Compass, ChevronDown, ChevronUp, MapPin, BedDouble, Search, Calendar, Users, Loader2, AlertCircle, ChevronRight } from 'lucide-react';
 import { SAFARI_ITINERARIES } from '../constants';
 import SectionHeader from '../components/SectionHeader';
 import OptimizedImage from '../components/OptimizedImage';
 import GlareHover from '../components/GlareHover';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  fetchSafariLocations,
+  fetchSafariRegions,
+  trackSafariMapInteraction,
+  checkLocationAvailability,
+} from '../services/safariMapService';
+import { SafariLocation } from '../types';
 
 const Safaris: React.FC = () => {
   const [expandedItinerary, setExpandedItinerary] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Safari Map State
+  const [mapLocations, setMapLocations] = useState<SafariLocation[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedLocation, setSelectedLocation] = useState<SafariLocation | null>(null);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [hoveredLocationId, setHoveredLocationId] = useState<string | null>(null);
+  const [mapViewMode, setMapViewMode] = useState<'grid' | 'list'>('grid');
+  const [checkInDate, setCheckInDate] = useState<string>('');
+  const [checkOutDate, setCheckOutDate] = useState<string>('');
+  const [guests, setGuests] = useState<number>(2);
+
+  // Load safari locations and regions
+  useEffect(() => {
+    const loadSafariData = async () => {
+      try {
+        setMapLoading(true);
+        setMapError(null);
+
+        // Fetch regions and locations
+        const regionsData = await fetchSafariRegions();
+        setRegions(regionsData);
+
+        const locationsData = await fetchSafariLocations();
+        setMapLocations(locationsData);
+
+        // Track page view
+        await trackSafariMapInteraction({
+          locationId: 'safaris-page',
+          interactionType: 'view',
+        });
+      } catch (err) {
+        console.error('Error loading safari data:', err);
+        setMapError('Failed to load safari locations.');
+      } finally {
+        setMapLoading(false);
+      }
+    };
+
+    loadSafariData();
+  }, []);
+
+  // Filter locations based on region and search
+  const filteredLocations = mapLocations.filter(location => {
+    const matchesRegion = !selectedRegion || location.region === selectedRegion;
+    const matchesSearch =
+      !searchTerm ||
+      location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesRegion && matchesSearch;
+  });
+
+  // Handle location click
+  const handleLocationClick = useCallback(
+    async (location: SafariLocation) => {
+      setSelectedLocation(location);
+      await trackSafariMapInteraction({
+        locationId: location.id,
+        interactionType: 'click',
+        metadata: { region: location.region },
+      });
+    },
+    []
+  );
+
+  // Handle location hover
+  const handleLocationHover = useCallback((locationId: string | null) => {
+    setHoveredLocationId(locationId);
+    if (locationId) {
+      trackSafariMapInteraction({
+        locationId: locationId,
+        interactionType: 'hover',
+      }).catch(err => console.error('Failed to track hover:', err));
+    }
+  }, []);
+
+  // Handle booking
+  const handleMapBooking = useCallback(
+    async (location: SafariLocation) => {
+      if (!checkInDate || !checkOutDate) {
+        setMapError('Please select check-in and check-out dates');
+        return;
+      }
+
+      const isAvailable = await checkLocationAvailability(
+        location.id,
+        checkInDate,
+        checkOutDate
+      );
+
+      if (!isAvailable) {
+        setMapError('This location is not available for the selected dates');
+        return;
+      }
+
+      await trackSafariMapInteraction({
+        locationId: location.id,
+        interactionType: 'booking_initiated',
+        metadata: { checkInDate, checkOutDate, guests },
+      });
+
+      navigate('/booking', {
+        state: {
+          property: {
+            id: location.id,
+            name: location.name,
+            type: 'safari',
+            region: location.region,
+            basePrice: location.lodging?.[0]?.pricePerNight || '500',
+            currency: 'KES',
+            image: location.imageUrl,
+            description: location.description,
+          },
+          checkInDate,
+          checkOutDate,
+          numberOfGuests: guests,
+        },
+      });
+    },
+    [checkInDate, checkOutDate, guests, navigate]
+  );
+
+  // Handle info opened
+  const handleInfoOpened = useCallback((location: SafariLocation) => {
+    trackSafariMapInteraction({
+      locationId: location.id,
+      interactionType: 'info_opened',
+    }).catch(err => console.error('Failed to track info opened:', err));
+  }, []);
+
+  // Validate dates
+  const isDatesValid = checkInDate && checkOutDate && new Date(checkOutDate) > new Date(checkInDate);
 
   const toggleItinerary = (id: string) => {
     setExpandedItinerary(expandedItinerary === id ? null : id);
@@ -188,30 +330,428 @@ landscapes, wildlife, and cultures ensure that every adventure is enriching and 
         </div>
       </section>
 
-      {/* Map Viz Placeholder */}
-      <section className="py-20 bg-black text-white text-center">
+      {/* Interactive Safari Map Section */}
+      <section className="py-20 bg-stone-100">
         <div className="container mx-auto px-6">
-          <div className="bg-gray-900 rounded-xl p-8 max-w-5xl mx-auto border border-gray-800 relative overflow-hidden min-h-[400px] flex flex-col items-center justify-center">
-            {/* Abstract Map UI */}
-            <div className="absolute inset-0 opacity-20">
-              {/* Just lines and dots to simulate a map */}
-              <svg className="w-full h-full" viewBox="0 0 800 400">
-                <path d="M100,300 Q250,100 400,200 T700,150" fill="none" stroke="#DD5536" strokeWidth="2" strokeDasharray="5,5" />
-                <circle cx="100" cy="300" r="4" fill="white" />
-                <circle cx="400" cy="200" r="4" fill="white" />
-                <circle cx="700" cy="150" r="4" fill="white" />
-              </svg>
+          <SectionHeader title="Interactive Safari Locations" subtitle="Explore & Book Direct" />
+
+          {/* Error Message */}
+          {mapError && (
+            <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-red-900">{mapError}</p>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="mb-12 bg-white p-6 rounded-lg border border-gray-200">
+            <h3 className="text-lg font-semibold text-dark mb-6">Plan Your Safari</h3>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Dates */}
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Check-in Date
+                  </span>
+                  <input
+                    type="date"
+                    value={checkInDate}
+                    onChange={e => setCheckInDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Check-out Date
+                  </span>
+                  <input
+                    type="date"
+                    value={checkOutDate}
+                    onChange={e => setCheckOutDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </label>
+              </div>
+
+              {/* Guests & Search */}
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Number of Guests
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value={guests}
+                    onChange={e => setGuests(parseInt(e.target.value))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Search className="w-4 h-4" />
+                    Search Locations
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search by name..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </label>
+              </div>
             </div>
 
-            <Map size={48} className="text-primary mb-6 relative z-10" />
-            <h2 className="font-serif text-3xl mb-4 relative z-10">Interactive Safari Map</h2>
-            <p className="text-gray-400 max-w-lg mx-auto mb-8 relative z-10">
-              Visualize your journey from the highlands to the plains. See how our properties connect to key wildlife corridors.
-            </p>
-            <button className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-full font-bold uppercase text-sm tracking-widest relative z-10 transition-colors">
-              Explore Route
-            </button>
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <select
+                value={selectedRegion}
+                onChange={e => setSelectedRegion(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+              >
+                <option value="">All Regions</option>
+                {regions.map(region => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex gap-2 border border-gray-300 rounded-lg p-1">
+                <button
+                  onClick={() => setMapViewMode('grid')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    mapViewMode === 'grid'
+                      ? 'bg-primary text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => setMapViewMode('list')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    mapViewMode === 'list'
+                      ? 'bg-primary text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  List
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Loading State */}
+          {mapLoading && (
+            <div className="text-center py-12">
+              <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+              <p className="text-gray-600">Loading safari locations...</p>
+            </div>
+          )}
+
+          {/* Grid View */}
+          {!mapLoading && mapViewMode === 'grid' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredLocations.map(location => (
+                <motion.div
+                  key={location.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className={`bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border-2 ${
+                    hoveredLocationId === location.id
+                      ? 'border-primary shadow-xl'
+                      : 'border-transparent'
+                  }`}
+                  onMouseEnter={() => handleLocationHover(location.id)}
+                  onMouseLeave={() => handleLocationHover(null)}
+                  onClick={() => {
+                    handleLocationClick(location);
+                    handleInfoOpened(location);
+                  }}
+                >
+                  {/* Image */}
+                  <div className="relative h-48 bg-gray-200 overflow-hidden group">
+                    {location.imageUrl ? (
+                      <img
+                        src={location.imageUrl}
+                        alt={location.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-300">
+                        <MapPin className="w-8 h-8 text-gray-500" />
+                      </div>
+                    )}
+                    <div className="absolute top-3 right-3 bg-primary text-white px-3 py-1 rounded-full text-xs font-semibold">
+                      {location.region}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-4">
+                    <h3 className="text-lg font-bold text-dark mb-2">{location.name}</h3>
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                      {location.description}
+                    </p>
+
+                    <div className="space-y-2 mb-4 text-xs text-gray-600">
+                      {location.distance_from_nairobi && (
+                        <p className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {location.distance_from_nairobi}
+                        </p>
+                      )}
+                      {location.wildlife && location.wildlife.length > 0 && (
+                        <p>
+                          <span className="font-medium">Wildlife:</span> {location.wildlife.slice(0, 2).join(', ')}
+                          {location.wildlife.length > 2 && '...'}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleMapBooking(location);
+                      }}
+                      disabled={!isDatesValid}
+                      className={`w-full py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+                        isDatesValid
+                          ? 'bg-primary text-white hover:bg-[#c4492e]'
+                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isDatesValid ? (
+                        <>
+                          Book Now
+                          <ChevronRight className="w-4 h-4" />
+                        </>
+                      ) : (
+                        'Select Dates'
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* List View */}
+          {!mapLoading && mapViewMode === 'list' && (
+            <div className="space-y-4">
+              {filteredLocations.map(location => (
+                <motion.div
+                  key={location.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 cursor-pointer border-l-4 border-primary"
+                  onClick={() => {
+                    handleLocationClick(location);
+                    handleInfoOpened(location);
+                  }}
+                >
+                  <div className="flex flex-col sm:flex-row gap-6">
+                    <div className="flex-shrink-0 w-full sm:w-40 h-32 rounded-lg overflow-hidden bg-gray-200">
+                      {location.imageUrl ? (
+                        <img
+                          src={location.imageUrl}
+                          alt={location.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <MapPin className="w-6 h-6 text-gray-500" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="mb-3">
+                        <h3 className="text-xl font-bold text-dark">{location.name}</h3>
+                        <p className="text-sm text-gray-600">{location.region}</p>
+                      </div>
+
+                      <p className="text-sm text-gray-600 mb-3">{location.description}</p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4 text-xs text-gray-600">
+                        {location.distance_from_nairobi && (
+                          <p className="flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {location.distance_from_nairobi}
+                          </p>
+                        )}
+                        {location.best_time_to_visit && (
+                          <p className="flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {location.best_time_to_visit}
+                          </p>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleMapBooking(location);
+                        }}
+                        disabled={!isDatesValid}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors inline-flex items-center gap-2 ${
+                          isDatesValid
+                            ? 'bg-primary text-white hover:bg-[#c4492e]'
+                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {isDatesValid ? (
+                          <>
+                            Book Now
+                            <ChevronRight className="w-4 h-4" />
+                          </>
+                        ) : (
+                          'Select Dates'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* No Results */}
+          {!mapLoading && filteredLocations.length === 0 && (
+            <div className="text-center py-12">
+              <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-xl font-semibold text-gray-600 mb-2">No locations found</p>
+              <p className="text-gray-500">Try adjusting your filters or search terms</p>
+            </div>
+          )}
+
+          {/* Results Count */}
+          {!mapLoading && filteredLocations.length > 0 && (
+            <div className="mt-6 text-sm text-gray-600 text-center">
+              Showing <span className="font-semibold text-dark">{filteredLocations.length}</span> of{' '}
+              <span className="font-semibold text-dark">{mapLocations.length}</span> locations
+            </div>
+          )}
+
+          {/* Location Details Modal */}
+          {selectedLocation && (
+            <div
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+              onClick={() => setSelectedLocation(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-dark">{selectedLocation.name}</h2>
+                  <button
+                    onClick={() => setSelectedLocation(null)}
+                    className="text-gray-500 hover:text-gray-700 text-2xl"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="p-6">
+                  {selectedLocation.imageUrl && (
+                    <img
+                      src={selectedLocation.imageUrl}
+                      alt={selectedLocation.name}
+                      className="w-full h-80 object-cover rounded-lg mb-6"
+                    />
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Region</p>
+                      <p className="font-semibold text-dark">{selectedLocation.region}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Distance from Nairobi</p>
+                      <p className="font-semibold text-dark">
+                        {selectedLocation.distance_from_nairobi || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Best Time to Visit</p>
+                      <p className="font-semibold text-dark">
+                        {selectedLocation.best_time_to_visit || 'Year-round'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedLocation.description && (
+                    <div className="mb-6">
+                      <p className="text-sm text-gray-600 mb-2 font-semibold">Description</p>
+                      <p className="text-gray-700 leading-relaxed">{selectedLocation.description}</p>
+                    </div>
+                  )}
+
+                  {selectedLocation.wildlife && selectedLocation.wildlife.length > 0 && (
+                    <div className="mb-6">
+                      <p className="text-sm text-gray-600 mb-3 font-semibold">Wildlife</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedLocation.wildlife.map((animal, idx) => (
+                          <span
+                            key={idx}
+                            className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium"
+                          >
+                            {animal}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedLocation.lodging && selectedLocation.lodging.length > 0 && (
+                    <div className="mb-6">
+                      <p className="text-sm text-gray-600 mb-3 font-semibold">Lodging Options</p>
+                      <div className="space-y-3">
+                        {selectedLocation.lodging.map((lodge: any, idx: number) => (
+                          <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                            <p className="font-medium text-dark">{lodge.name}</p>
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-xs text-gray-600 capitalize">{lodge.type}</span>
+                              <span className="text-sm font-semibold text-primary">{lodge.pricePerNight}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setSelectedLocation(null);
+                      handleMapBooking(selectedLocation);
+                    }}
+                    disabled={!isDatesValid}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
+                      isDatesValid
+                        ? 'bg-primary hover:bg-[#c4492e]'
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {isDatesValid ? 'Proceed to Booking' : 'Select Dates to Book'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
       </section>
 
