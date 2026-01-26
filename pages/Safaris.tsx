@@ -101,38 +101,45 @@ const Safaris: React.FC = () => {
   // Handle booking
   const handleMapBooking = useCallback(
     async (location: SafariLocation) => {
-      if (!checkInDate || !checkOutDate) {
-        setMapError('Please select check-in and check-out dates');
-        return;
-      }
+      try {
+        if (!checkInDate || !checkOutDate) {
+          setMapError('Please select check-in and check-out dates');
+          return;
+        }
 
-      const isAvailable = await checkLocationAvailability(
-        location.id,
-        checkInDate,
-        checkOutDate
-      );
-
-      if (!isAvailable) {
-        setMapError('This location is not available for the selected dates');
-        return;
-      }
-
-      await trackSafariMapInteraction({
-        locationId: location.id,
-        interactionType: 'booking_initiated',
-        metadata: { checkInDate, checkOutDate, guests },
-      });
-
-      navigate('/booking', {
-        state: {
-          propertyId: location.id,
-          propertyType: 'safari',
-          propertyName: location.name,
+        const isAvailable = await checkLocationAvailability(
+          location.id,
           checkInDate,
-          checkOutDate,
-          numberOfGuests: guests,
-        },
-      });
+          checkOutDate
+        );
+
+        if (!isAvailable) {
+          setMapError('This location is not available for the selected dates');
+          return;
+        }
+
+        // Track interaction in background (don't await)
+        trackSafariMapInteraction({
+          locationId: location.id,
+          interactionType: 'booking_initiated',
+          metadata: { checkInDate, checkOutDate, guests },
+        }).catch(err => console.error('Failed to track booking:', err));
+
+        // Navigate to booking immediately
+        navigate('/booking', {
+          state: {
+            propertyId: location.id,
+            propertyType: 'safari',
+            propertyName: location.name,
+            checkInDate,
+            checkOutDate,
+            numberOfGuests: guests,
+          },
+        });
+      } catch (err) {
+        console.error('Booking error:', err);
+        setMapError('An error occurred while processing your booking. Please try again.');
+      }
     },
     [checkInDate, checkOutDate, guests, navigate]
   );
@@ -269,7 +276,20 @@ landscapes, wildlife, and cultures ensure that every adventure is enriching and 
                       <button
                         className="flex-1 bg-primary hover:bg-[#c4492e] text-white px-6 py-3 rounded-lg text-sm font-medium transition-all uppercase tracking-wide shadow-md hover:shadow-lg active:scale-95"
                         onClick={() => {
-                          navigate('/others');
+                          if (!checkInDate || !checkOutDate) {
+                            setMapError('Please select check-in and check-out dates');
+                            return;
+                          }
+                          navigate('/booking', {
+                            state: {
+                              propertyId: itinerary.id,
+                              propertyType: 'safari',
+                              propertyName: itinerary.title,
+                              checkInDate,
+                              checkOutDate,
+                              numberOfGuests: guests,
+                            },
+                          });
                         }}
                       >
                         Book Now

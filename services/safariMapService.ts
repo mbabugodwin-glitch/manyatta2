@@ -252,13 +252,15 @@ export const checkLocationAvailability = async (
 
     if (error) {
       console.error('Error checking availability:', error);
-      return false;
+      // Return true to allow booking - the Booking page will do the final check
+      return true;
     }
 
     // Location is available if there are no conflicting bookings
     return !data || data.length === 0;
   } catch (error) {
     console.error('Unexpected error checking availability:', error);
-    return false;
+    // Return true to allow booking - the Booking page will do the final check
+    return true;
   }
 };
